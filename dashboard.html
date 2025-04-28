@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly Metrics Dashboard</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    body {
+      padding: 20px;
+      font-family: sans-serif;
+      background: #f8f9fa;
+    }
+    .chart-container {
+      margin-bottom: 40px;
+    }
+    .metric-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    svg {
+      overflow: visible;
+    }
+    .goal-line {
+      stroke: red;
+      stroke-dasharray: 4;
+    }
+    .above-goal {
+      color: green;
+    }
+    .below-goal {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1>Weekly Metrics Dashboard</h1>
+  <div id="dashboard"></div>
+
+  <script>
+    const dataUrl = "https://script.google.com/a/macros/forhims.com/s/AKfycbw8GvjYzkLveQSAlY4ZBFaeY9LD-OnlBf-NltlOniWrGNIwrShMv3XGU8IB_UCMlM3-PA/exec";
+
+    // Sample hardcoded goals — you can hook this up to a tab later
+    const goalMap = {
+      "hims Hair": {
+        "Marginal CAC": 100,
+        "Revenue": 300,
+      },
+      "hims Weight": {
+        "Marginal CAC": 110,
+        "Revenue": 280,
+      }
+    };
+
+    fetch(dataUrl)
+      .then(res => res.json())
+      .then(data => {
+        // Parse and group data by category + metric
+        const grouped = d3.group(data, d => d.category, d => d.metric);
+        const dashboard = d3.select("#dashboard");
+
+        grouped.forEach((metrics, category) => {
+          metrics.forEach((entries, metric) => {
+            // Sort by week date
+            entries.sort((a, b) => new Date(a.wk) - new Date(b.wk));
+            const values = entries.map(d => ({ date: new Date(d.wk), value: +d.value.replace(/[^\d.-]/g, '') }));
+
+            const goal = goalMap[category]?.[metric];
+            const latest = values[values.length - 1]?.value;
+
+            const container = dashboard.append("div")
+              .attr("class", "chart-container")
+              .append("div").attr("class", "card p-3");
+
+            container.append("div")
+              .attr("class", "metric-title")
+              .text(`${category} | ${metric}`);
+
+            const svg = container.append("svg")
+              .attr("width", 300)
+              .attr("height", 60);
+
+            const x = d3.scaleTime()
+              .domain(d3.extent(values, d => d.date))
+              .range([0, 280]);
+
+            const y = d3.scaleLinear()
+              .domain([0, d3.max(values, d => d.value) * 1.2])
+              .range([40, 0]);
+
+            const line = d3.line()
+              .x(d => x(d.date))
+              .y(d => y(d.value));
+
+            svg.append("path")
+              .datum(values)
+              .attr("fill", "none")
+              .attr("stroke", "#007bff")
+              .attr("stroke-width", 2)
+              .attr("d", line);
+
+            // Draw goal line
+            if (goal !== undefined) {
+              svg.append("line")
+                .attr("class", "goal-line")
+                .attr("x1", 0)
+                .attr("x2", 280)
+                .attr("y1", y(goal))
+                .attr("y2", y(goal));
+
+              const diff = (latest - goal).toFixed(1);
+              container.append("div")
+                .attr("class", diff >= 0 ? "above-goal" : "below-goal")
+                .text(`${latest >= goal ? "+" : ""}${diff} vs goal (${goal})`);
+            }
+          });
+        });
+      })
+      .catch(err => {
+        document.getElementById("dashboard").innerHTML = "<p class='text-danger'>Failed to load data.</p>";
+        console.error(err);
+      });
+  </script>
+</body>
+</html>
